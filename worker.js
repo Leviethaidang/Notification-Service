@@ -10,12 +10,15 @@ const sqs = new AWS.SQS();
 const ses = new AWS.SES();
 
 const NOTIFICATION_REQUESTED_QUEUE_URL = process.env.NOTIFICATION_REQUESTED_QUEUE_URL;
-const EMAIL_MODE = String(process.env.EMAIL_MODE || 'LOG').toUpperCase();
 const SES_FROM_EMAIL = process.env.SES_FROM_EMAIL;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 
 if (!NOTIFICATION_REQUESTED_QUEUE_URL) {
     console.error('Thiếu NOTIFICATION_REQUESTED_QUEUE_URL trong .env');
+    process.exit(1);
+}
+if (!SES_FROM_EMAIL) {
+    console.error('Thiếu SES_FROM_EMAIL trong .env');
     process.exit(1);
 }
 
@@ -98,27 +101,6 @@ async function sendEmail({ to, subject, text }) {
         };
     }
 
-    if (EMAIL_MODE === 'LOG') {
-        console.log('\n================ EMAIL LOG ================');
-        console.log('To:', to);
-        console.log('Subject:', subject);
-        console.log(text);
-        console.log('===========================================\n');
-
-        return {
-            sent: true,
-            mode: 'LOG'
-        };
-    }
-
-    if (EMAIL_MODE !== 'SES') {
-        throw new Error(`EMAIL_MODE không hợp lệ: ${EMAIL_MODE}. Chỉ hỗ trợ LOG hoặc SES.`);
-    }
-
-    if (!SES_FROM_EMAIL) {
-        throw new Error('Thiếu SES_FROM_EMAIL trong .env');
-    }
-
     const result = await ses.sendEmail({
         Source: SES_FROM_EMAIL,
         Destination: {
@@ -138,9 +120,14 @@ async function sendEmail({ to, subject, text }) {
         }
     }).promise();
 
+    console.log('[EMAIL SENT]', {
+        to,
+        subject,
+        messageId: result.MessageId
+    });
+
     return {
         sent: true,
-        mode: 'SES',
         messageId: result.MessageId
     };
 }
@@ -387,7 +374,8 @@ async function processMessage(message) {
 async function pollMessages() {
     console.log('Notification worker started.');
     console.log(`Listening notification queue: ${NOTIFICATION_REQUESTED_QUEUE_URL}`);
-    console.log(`EMAIL_MODE=${EMAIL_MODE}`);
+    console.log(`SES_FROM_EMAIL=${SES_FROM_EMAIL}`);
+    console.log(`ADMIN_EMAIL=${ADMIN_EMAIL || 'Không cấu hình'}`);
 
     while (true) {
         try {
